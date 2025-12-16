@@ -60,6 +60,120 @@ app.use((req, res, next) => {
   next();
 });
 
+async function ensureSchema() {
+  await pool.query(`
+    create table if not exists public.rooms (
+      id text primary key,
+      dungeon text not null,
+      time timestamptz not null,
+      capacity int not null check (capacity between 2 and 20),
+      host text not null,
+      host_token text not null,
+      created_at timestamptz not null default now()
+    );
+  `);
+
+  await pool.query(`
+    create table if not exists public.participants (
+      id bigserial primary key,
+      room_id text not null references public.rooms(id) on delete cascade,
+      namejob text not null,
+      token text not null,
+      created_at timestamptz not null default now()
+    );
+  `);
+
+  await pool.query(`
+    create unique index if not exists idx_participants_room_token
+      on public.participants(room_id, token);
+  `);
+
+  await pool.query(`
+    create index if not exists idx_rooms_created_at
+      on public.rooms(created_at desc);
+  `);
+
+  await pool.query(`
+    create index if not exists idx_participants_room_id
+      on public.participants(room_id);
+  `);
+}
+
+async function getRoomOne(roomId, myToken) {
+  const roomRes = await pool.query(`select * from public.rooms where id = $1`, [roomId]);
+  if (roomRes.rowCount === 0) return null;
+  const room = roomRes.rows[0];
+
+  const pRes = await pool.query(
+    `select id, room_id, namejob, token, created_at
+     from public.participants
+     where room_id = $1
+     order by id asc`,
+    [roomId]
+  );
+
+  const participants = pRes.rows.map((p) => ({
+    id: p.id,
+    namejob: p.namejob,
+    created_at: p.created_at,
+    isMe: p.token === myToken,
+  }));
+
+  const count = participants.length;
+
+  return {
+    ...room,
+    participants,
+    joined: participants.some((p) => p.isMe),
+    isHost: room.host_token === myToken,
+    count,
+    isFull: count >= room.capacity,
+  };
+}
+
+async function getRoomsAll(myToken) {
+  const roomsRes = await pool.query(`select * from public.rooms order by created_at desc`);
+  const rooms = roomsRes.rows;
+
+  if (rooms.length === 0) return [];
+
+  const ids = rooms.map((r) => r.id);
+
+  const pRes = await pool.query(
+    `select id, room_id, namejob, token, created_at
+     from public.participants
+     where room_id = any($1::text[])
+     order by id asc`,
+    [ids]
+  );
+
+  const byRoom = new Map();
+  for (const p of pRes.rows) {
+    if (!byRoom.has(p.room_id)) byRoom.set(p.room_id, []);
+    byRoom.get(p.room_id).push({
+      id: p.id,
+      namejob: p.namejob,
+      created_at: p.created_at,
+      isMe: p.token === myToken,
+    });
+  }
+
+  return rooms.map((r) => {
+    const list = byRoom.get(r.id) || [];
+    const count = list.length;
+    return {
+      ...r,
+      participants: list,
+      joined: list.some((p) => p.isMe),
+      isHost: r.host_token === myToken,
+      count,
+      isFull: count >= r.capacity,
+    };
+  });
+}
+
+
+
 // ✅ 에러를 502 대신 500으로 “제대로” 내려주게 래퍼
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -84,6 +198,8 @@ app.use((err, req, res, next) => {
   console.error("❌ API Error:", err);
   res.status(500).json({ ok: false, error: "SERVER_ERROR" });
 });
+
+await ensureSchema();
 
 // ✅ listen은 맨 마지막에 한 번만
 const PORT = Number(process.env.PORT) || 8000;
