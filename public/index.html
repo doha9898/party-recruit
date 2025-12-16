@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>밥풀 레기온 파티원 모집</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif; margin: 24px; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    h1 { margin: 0 0 16px; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 16px; margin: 12px 0; }
+    .muted { color: #666; font-size: 13px; }
+    .error { color: #b00020; margin-top: 8px; }
+    .ok { color: #0a7a2f; margin-top: 8px; }
+    .topRow { display:flex; align-items:center; justify-content:space-between; gap: 12px; }
+    .pill { font-size: 12px; border: 1px solid #ddd; border-radius: 999px; padding: 4px 10px; }
+    .gridCreate { display:grid; grid-template-columns: 1.2fr 1fr 0.6fr 1fr auto; gap: 10px; align-items: center; }
+    input, button, select { padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; }
+    button { cursor: pointer; border: 1px solid #999; background: #fff; }
+    button:hover { background: #f6f6f6; }
+    button.danger { border-color: #c33; }
+    button.danger:hover { background: #fff3f3; }
+    .roomHeader { display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; }
+    .roomTitle { font-size: 18px; margin: 0; }
+    .roomMeta { margin-top: 4px; }
+    .joinRow { display:flex; gap: 10px; margin-top: 10px; }
+    .joinRow input { flex: 1; }
+    ul.people { margin: 8px 0 0; padding-left: 18px; }
+    .meTag { font-size: 12px; border: 1px solid #bbb; border-radius: 999px; padding: 1px 8px; margin-left: 8px; color: #333; }
+    .fullTag { border-color: #c33; color: #c33; }
+
+/* ✅ 모바일 반응형 */
+@media (max-width: 720px) {
+  body { margin: 16px; }
+  .gridCreate {
+    grid-template-columns: 1fr;   /* 한 줄에 하나씩 */
+    gap: 10px;
+  }
+
+  /* 날짜+시+분은 가로 유지(너무 길면 줄바꿈) */
+  .gridCreate > div[style*="display:flex"] {
+    flex-wrap: wrap;
+  }
+  .gridCreate input,
+  .gridCreate select,
+  .gridCreate button {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* 날짜/시/분만 3개를 적당히 나눠 갖게 */
+  #date { flex: 1 1 160px; }
+  #hour, #minute { flex: 1 1 90px; }
+
+  .topRow { flex-wrap: wrap; gap: 8px; }
+  .roomHeader { flex-wrap: wrap; }
+}
+
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1><center>밥풀 레기온 파티원 모집</center></h1>
+
+    <div id="singleRoomBar" class="card" style="display:none;">
+      <div class="topRow">
+        <div>
+          <b>공유 링크로 들어온 방</b>
+          <div class="muted">이 화면은 해당 방만 보여줘.</div>
+        </div>
+        <button id="goAllBtn">전체 보기</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="topRow">
+        <div>
+          <b>방 만들기</b>
+          <div class="muted">던전 / 시간 / 정원 / 방장(닉·직업) 입력 → 생성</div>
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <div class="gridCreate">
+        <input id="dungeon" placeholder="던전 이름 (예: 불신, 초월9단)" />
+
+        <div style="display:flex; gap:10px; align-items:center;">
+          <input id="date" type="date" />
+          <select id="hour"></select>
+          <select id="minute"></select>
+        </div>
+
+        <input id="capacity" type="number" min="2" max="20" value="4" />
+        <input id="host" placeholder="닉네임/직업 (예: 도하/호법성)" />
+        <button id="createBtn">파티원 모집</button>
+      </div>
+
+      <div id="createMsg"></div>
+    </div>
+
+    <div class="topRow" style="margin-top:18px;">
+      <b>모집 중인 방</b>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button id="refreshBtn" title="목록 새로고침">새로고침</button>
+        <span class="pill" id="statusPill">로딩...</span>
+      </div>
+    </div>
+
+    <div id="rooms"></div>
+  </div>
+
+<script>
+  const NAMEJOB_KEY = "party_namejob";
+
+  function loadSavedNamejob() {
+    return (localStorage.getItem(NAMEJOB_KEY) || "").trim();
+  }
+  function saveNamejob(v) {
+    const t = (v || "").trim();
+    if (t) localStorage.setItem(NAMEJOB_KEY, t);
+  }
+
+  const $ = (id) => document.getElementById(id);
+
+  function pad2(n){ return String(n).padStart(2,"0"); }
+
+  function initTimePickers() {
+    const hourSel = $("hour");
+    const minuteSel = $("minute");
+
+    // 00-23시
+    hourSel.innerHTML = Array.from({length:24}, (_,h)=>
+      `<option value="${pad2(h)}">${pad2(h)}시</option>`
+    ).join("");
+
+    // 00/10/20/30/40/50분
+    const mins = [0,10,20,30,40,50].map(m => pad2(m));
+    minuteSel.innerHTML = mins.map(m =>
+      `<option value="${m}">${m}분</option>`
+    ).join("");
+
+    // 기본값: 지금+30분, 10분 단위 올림
+    const t = new Date(Date.now() + 30*60*1000);
+    let m = Math.ceil(t.getMinutes()/10)*10;
+    if (m === 60) { t.setHours(t.getHours()+1); m = 0; }
+    t.setMinutes(m,0,0);
+
+    $("date").value = `${t.getFullYear()}-${pad2(t.getMonth()+1)}-${pad2(t.getDate())}`;
+    hourSel.value = pad2(t.getHours());
+    minuteSel.value = pad2(t.getMinutes());
+  }
+
+  function getSelectedISO() {
+    const d = $("date").value;     // YYYY-MM-DD
+    const hh = $("hour").value;    // 00-23
+    const mm = $("minute").value;  // 00/10/...
+    if (!d || !hh || !mm) return null;
+
+    const local = new Date(`${d}T${hh}:${mm}:00`);
+    if (Number.isNaN(local.getTime())) return null;
+    return local.toISOString();
+  }
+
+  async function api(path, options) {
+    const res = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      ...options,
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch {}
+    if (!res.ok) {
+      const msg = (data && data.message) ? data.message : `요청 실패 (${res.status})`;
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  function setMsg(el, type, msg) {
+    el.innerHTML = msg ? `<div class="${type}">${escapeHtml(msg)}</div>` : "";
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (m) => ({
+      "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+    }[m]));
+  }
+
+  // ✅ (요일) 포함
+  function formatTime(iso) {
+    try {
+      const d = new Date(iso);
+      const wd = ["일","월","화","수","목","금","토"][d.getDay()];
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mi = String(d.getMinutes()).padStart(2, "0");
+      return `${mm}/${dd}(${wd}) ${hh}:${mi}`;
+    } catch {
+      return iso;
+    }
+  }
+
+  async function loadRooms() {
+    const pill = $("statusPill");
+    pill.textContent = "불러오는 중...";
+
+    const match = location.pathname.match(/^\/r\/([A-Za-z0-9_-]+)$/);
+    const singleId = match ? match[1] : null;
+
+    try {
+      if (singleId) {
+        $("singleRoomBar").style.display = "block";
+        pill.textContent = "방 1개";
+        const room = await api(`/api/rooms/${singleId}`);
+        renderRooms([room]);
+      } else {
+        $("singleRoomBar").style.display = "none";
+        const rooms = await api("/api/rooms");
+        pill.textContent = `방 ${rooms.length}개`;
+        renderRooms(rooms);
+      }
+    } catch (e) {
+      pill.textContent = "오류";
+      $("rooms").innerHTML = `<div class="card"><div class="error">${escapeHtml(e.message)}</div></div>`;
+    }
+  }
+
+  function renderRooms(rooms) {
+    const root = $("rooms");
+    if (!rooms.length) {
+      root.innerHTML = `<div class="card"><div class="muted">아직 모집 방이 없어. 위에서 먼저 만들어봐!</div></div>`;
+      return;
+    }
+
+    const savedNamejob = loadSavedNamejob();
+
+    root.innerHTML = rooms.map(room => {
+      const people = room.participants || [];
+      const full = room.isFull;
+      const fullPill = full ? ` <span class="pill fullTag">정원 마감</span>` : "";
+      const shareBtn = `<button class="shareBtn" title="이 방 링크 복사">링크 복사</button>`;
+      const hostActions = room.isHost ? `<button class="deleteBtn danger">방 삭제</button>` : "";
+
+      let actionHtml = "";
+      if (room.isHost) {
+        actionHtml = ``;
+      } else if (room.joined) {
+        actionHtml = `<button class="leaveBtn">예약 취소</button>`;
+      } else if (full) {
+        actionHtml = `<button disabled title="정원이 꽉 찼어">예약 마감</button>`;
+      } else {
+        // ✅ 저장된 닉/직업 자동 입력
+        actionHtml = `
+          <input class="joinInput" value="${escapeHtml(savedNamejob)}" placeholder="참가 닉네임/직업 (예: 린엘/치유성)" />
+          <button class="joinBtn">예약(참가)</button>
+        `;
+      }
+
+      return `
+        <div class="card" data-room="${room.id}">
+          <div class="roomHeader">
+            <div>
+              <div class="roomTitle">
+                <b>${escapeHtml(room.dungeon)}</b>
+                <b style="margin-left:10px;">${escapeHtml(formatTime(room.time))}</b>
+                ${fullPill}
+              </div>
+              <div class="muted roomMeta">
+                정원: ${room.count}/${room.capacity}
+              </div>
+            </div>
+
+            <div style="display:flex; gap:8px; align-items:center;">
+              ${shareBtn}
+              <span class="pill">참가 ${room.count}명</span>
+              ${hostActions}
+            </div>
+          </div>
+
+          <div class="joinRow">${actionHtml}</div>
+          <div class="joinMsg"></div>
+
+          <div class="muted" style="margin-top:10px;">참가자</div>
+          <ul class="people">
+            ${people.length ? people.map(p => `
+              <li>
+                ${escapeHtml(p.namejob)}
+                ${p.isMe ? `<span class="meTag">나</span>` : ``}
+              </li>
+            `).join("") : `<li class="muted">아직 없음</li>`}
+          </ul>
+        </div>
+      `;
+    }).join("");
+
+    root.querySelectorAll(".card[data-room]").forEach(card => {
+      const roomId = card.getAttribute("data-room");
+      const msgEl = card.querySelector(".joinMsg");
+
+      // 링크 복사 / 공유
+      const shareBtnEl = card.querySelector(".shareBtn");
+      if (shareBtnEl) {
+        shareBtnEl.addEventListener("click", async () => {
+          setMsg(msgEl, "", "");
+          const url = `${location.origin}/r/${roomId}`;
+          try {
+            if (navigator.share) {
+              await navigator.share({ title: "파티 모집", url });
+              setMsg(msgEl, "ok", "공유 완료!");
+            } else {
+              await navigator.clipboard.writeText(url);
+              setMsg(msgEl, "ok", "링크 복사됨!");
+            }
+          } catch {
+            try { prompt("이 링크를 복사해서 보내줘:", url); } catch {}
+            setMsg(msgEl, "ok", "링크를 복사해서 공유해줘.");
+          }
+        });
+      }
+
+      // 참가
+      const joinBtn = card.querySelector(".joinBtn");
+      if (joinBtn) {
+        const input = card.querySelector(".joinInput");
+
+        // ✅ 타이핑 중에도 저장
+        input?.addEventListener("input", () => saveNamejob(input.value));
+
+        joinBtn.addEventListener("click", async () => {
+          const namejob = (input?.value || "").trim();
+          setMsg(msgEl, "", "");
+          if (!namejob) return setMsg(msgEl, "error", "닉네임/직업을 입력해줘.");
+
+          // ✅ 참가할 때도 저장
+          saveNamejob(namejob);
+
+          joinBtn.disabled = true;
+          try {
+            await api(`/api/rooms/${roomId}/join`, {
+              method: "POST",
+              body: JSON.stringify({ namejob })
+            });
+            setMsg(msgEl, "ok", "예약 완료!");
+            await loadRooms();
+          } catch (e) {
+            setMsg(msgEl, "error", e.message);
+          } finally {
+            joinBtn.disabled = false;
+          }
+        });
+      }
+
+      // 예약 취소
+      const leaveBtn = card.querySelector(".leaveBtn");
+      if (leaveBtn) {
+        leaveBtn.addEventListener("click", async () => {
+          setMsg(msgEl, "", "");
+          leaveBtn.disabled = true;
+          try {
+            await api(`/api/rooms/${roomId}/leave`, { method: "POST" });
+            setMsg(msgEl, "ok", "예약 취소 완료!");
+            await loadRooms();
+          } catch (e) {
+            setMsg(msgEl, "error", e.message);
+          } finally {
+            leaveBtn.disabled = false;
+          }
+        });
+      }
+
+      // 방 삭제(방장)
+      const delBtn = card.querySelector(".deleteBtn");
+      if (delBtn) {
+        delBtn.addEventListener("click", async () => {
+          setMsg(msgEl, "", "");
+          delBtn.disabled = true;
+          try {
+            await api(`/api/rooms/${roomId}`, { method: "DELETE" });
+            await loadRooms();
+          } catch (e) {
+            setMsg(msgEl, "error", e.message);
+          } finally {
+            delBtn.disabled = false;
+          }
+        });
+      }
+    });
+  }
+
+  // ✅ 셀렉트 옵션 채우기
+  initTimePickers();
+
+  // ✅ 저장된 닉/직업을 방장 입력칸에 자동 세팅 + 타이핑 중 저장
+  const saved = loadSavedNamejob();
+  if (saved && $("host")) $("host").value = saved;
+  $("host")?.addEventListener("input", (e) => saveNamejob(e.target.value));
+
+  $("goAllBtn")?.addEventListener("click", () => {
+    history.pushState({}, "", "/");
+    loadRooms();
+  });
+
+  $("createBtn").addEventListener("click", async () => {
+    const dungeon = $("dungeon").value.trim();
+    const host = $("host").value.trim();
+    const cap = Number($("capacity").value);
+    const msgEl = $("createMsg");
+
+    setMsg(msgEl, "", "");
+
+    const iso = getSelectedISO();
+    if (!dungeon || !host || !iso) {
+      return setMsg(msgEl, "error", "던전/날짜/시간/정원/닉네임·직업을 모두 입력해줘.");
+    }
+    if (!Number.isFinite(cap) || cap < 2 || cap > 20) {
+      return setMsg(msgEl, "error", "정원은 2~20 사이로 입력해줘.");
+    }
+
+    // ✅ 방 생성 시 방장 닉/직업 저장
+    saveNamejob(host);
+
+    $("createBtn").disabled = true;
+    try {
+      await api("/api/rooms", {
+        method: "POST",
+        body: JSON.stringify({ dungeon, time: iso, host, capacity: cap })
+      });
+      $("dungeon").value = "";
+      // ✅ host는 비우지 않음(재사용 편하게)
+      $("capacity").value = "4";
+      setMsg(msgEl, "ok", "방 생성 완료!");
+      await loadRooms();
+    } catch (e) {
+      setMsg(msgEl, "error", e.message);
+    } finally {
+      $("createBtn").disabled = false;
+    }
+  });
+
+  loadRooms();
+
+  $("refreshBtn")?.addEventListener("click", async () => {
+    $("refreshBtn").disabled = true;
+    try {
+      await loadRooms();
+    } finally {
+      $("refreshBtn").disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
