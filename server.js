@@ -269,9 +269,7 @@ app.delete("/api/rooms/:id", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-
-await ensureSchema();
-
-app.listen(PORT, () => {
-  console.log(`✅ running: http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Listening on ${PORT}`);
 });
+
