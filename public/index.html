@@ -23,8 +23,8 @@
     .roomHeader { display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; }
     .roomTitle { font-size: 18px; margin: 0; }
     .roomMeta { margin-top: 4px; }
-    .joinRow { display:flex; gap: 10px; margin-top: 10px; }
-    .joinRow input { flex: 1; }
+    .joinRow { display:flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+    .joinRow input { flex: 1; min-width: 220px; }
     ul.people { margin: 8px 0 0; padding-left: 18px; }
     .meTag { font-size: 12px; border: 1px solid #bbb; border-radius: 999px; padding: 1px 8px; margin-left: 8px; color: #333; }
     .fullTag { border-color: #c33; color: #c33; }
@@ -34,10 +34,7 @@
       body { margin: 16px; }
       .gridCreate { grid-template-columns: 1fr; gap: 10px; }
       .gridCreate > div[style*="display:flex"] { flex-wrap: wrap; }
-      .gridCreate input, .gridCreate select, .gridCreate button {
-        width: 100%;
-        box-sizing: border-box;
-      }
+      .gridCreate input, .gridCreate select, .gridCreate button { width: 100%; box-sizing: border-box; }
       #date { flex: 1 1 160px; }
       #hour, #minute { flex: 1 1 90px; }
       .topRow { flex-wrap: wrap; gap: 8px; }
@@ -96,7 +93,9 @@
 
 <script>
   const NAMEJOB_KEY = "party_namejob";
-  const ADMIN_KEY_STORAGE = "ADMIN_KEY";
+  const ADMIN_KEY_LS = "ADMIN_KEY";
+
+  const $ = (id) => document.getElementById(id);
 
   function loadSavedNamejob() {
     return (localStorage.getItem(NAMEJOB_KEY) || "").trim();
@@ -106,15 +105,13 @@
     if (t) localStorage.setItem(NAMEJOB_KEY, t);
   }
 
-  function getSavedAdminKey() {
-    return (localStorage.getItem(ADMIN_KEY_STORAGE) || "").trim();
+  function getAdminKey() {
+    return (localStorage.getItem(ADMIN_KEY_LS) || "").trim();
   }
-  function setSavedAdminKey(v) {
-    const t = (v || "").trim();
-    if (t) localStorage.setItem(ADMIN_KEY_STORAGE, t);
+  function setAdminKey(k) {
+    const t = (k || "").trim();
+    if (t) localStorage.setItem(ADMIN_KEY_LS, t);
   }
-
-  const $ = (id) => document.getElementById(id);
 
   function pad2(n){ return String(n).padStart(2,"0"); }
 
@@ -153,24 +150,33 @@
   }
 
   async function api(path, options = {}) {
-    // ✅ headers merge (options.headers가 있으면 Content-Type이 날아가지 않게)
-    const baseHeaders = { "Content-Type": "application/json" };
-    const mergedHeaders = { ...baseHeaders, ...(options.headers || {}) };
-
-    const res = await fetch(path, {
-      ...options,
-      headers: mergedHeaders,
-    });
-
+    const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+    const res = await fetch(path, { ...options, headers });
     const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch {}
-
     if (!res.ok) {
       const msg = (data && data.message) ? data.message : `요청 실패 (${res.status})`;
       throw new Error(msg);
     }
     return data;
+  }
+
+  async function apiDeleteWithAdmin(path) {
+    // 1) 저장된 키로 먼저 시도
+    const saved = getAdminKey();
+    if (saved) {
+      return api(path, { method: "DELETE", headers: { "x-admin-key": saved } });
+    }
+
+    // 2) 키 없으면 입력받기
+    const k = prompt("관리자 키를 입력하면 바로 삭제됩니다.\n(방장이면 그냥 취소 눌러도 삭제 가능합니다)");
+    if (!k) {
+      // 키 없이도 한번 시도 (방장일 수 있으니)
+      return api(path, { method: "DELETE" });
+    }
+    setAdminKey(k);
+    return api(path, { method: "DELETE", headers: { "x-admin-key": k } });
   }
 
   function setMsg(el, type, msg) {
@@ -237,12 +243,12 @@
       const fullPill = full ? ` <span class="pill fullTag">정원 마감</span>` : "";
       const shareBtn = `<button class="shareBtn" title="이 방 링크 복사">링크 복사</button>`;
 
-      // ✅ 삭제 버튼 "누구에게나 보이게"
+      // ✅ 삭제 버튼은 항상 보이게
       const deleteBtn = `<button class="deleteBtn danger">방 삭제</button>`;
 
       let actionHtml = "";
       if (room.isHost) {
-        actionHtml = ``;
+        actionHtml = `<span class="muted">※ 방장입니다. 삭제 버튼으로 방을 내릴 수 있어요.</span>`;
       } else if (room.joined) {
         actionHtml = `<button class="leaveBtn">예약 취소</button>`;
       } else if (full) {
@@ -255,7 +261,7 @@
       }
 
       return `
-        <div class="card" data-room="${room.id}" data-ishost="${room.isHost ? "1" : "0"}">
+        <div class="card" data-room="${room.id}">
           <div class="roomHeader">
             <div>
               <div class="roomTitle">
@@ -268,7 +274,7 @@
               </div>
             </div>
 
-            <div style="display:flex; gap:8px; align-items:center;">
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               ${shareBtn}
               <span class="pill">참가 ${room.count}명</span>
               ${deleteBtn}
@@ -293,10 +299,9 @@
 
     root.querySelectorAll(".card[data-room]").forEach(card => {
       const roomId = card.getAttribute("data-room");
-      const isHost = card.getAttribute("data-ishost") === "1";
       const msgEl = card.querySelector(".joinMsg");
 
-      // 링크 복사
+      // 링크 복사 / 공유
       const shareBtnEl = card.querySelector(".shareBtn");
       if (shareBtnEl) {
         shareBtnEl.addEventListener("click", async () => {
@@ -364,37 +369,22 @@
         });
       }
 
-      // ✅ 방 삭제(방장 or 관리자키)
+      // ✅ 방 삭제: 방장이면 바로, 아니면 관리자키 입력해서 삭제
       const delBtn = card.querySelector(".deleteBtn");
       if (delBtn) {
         delBtn.addEventListener("click", async () => {
           setMsg(msgEl, "", "");
-
-          const ok = confirm("이 방을 삭제할까?");
-          if (!ok) return;
+          if (!confirm("정말 이 방을 삭제할까?")) return;
 
           delBtn.disabled = true;
           try {
-            const headers = {};
-
-            // 방장이 아니면 관리자키 필요
-            if (!isHost) {
-              let key = getSavedAdminKey();
-              if (!key) {
-                key = prompt("관리자 키를 입력하면 삭제할 수 있어:", "") || "";
-              }
-              key = key.trim();
-              if (!key) {
-                throw new Error("방장이 아니면 관리자 키가 필요해.");
-              }
-              setSavedAdminKey(key);
-              headers["x-admin-key"] = key;
-            }
-
-            await api(`/api/rooms/${roomId}`, { method: "DELETE", headers });
+            // 방장인 경우는 헤더 없이도 통과할 것임
+            // 방장이 아니면 prompt로 키 받아 헤더로 보냄
+            await apiDeleteWithAdmin(`/api/rooms/${roomId}`);
             setMsg(msgEl, "ok", "삭제 완료!");
             await loadRooms();
           } catch (e) {
+            // 키가 틀렸거나 권한 없으면 여기로 옴
             setMsg(msgEl, "error", e.message);
           } finally {
             delBtn.disabled = false;
