@@ -5,6 +5,20 @@ import { fileURLToPath } from "url";
 import { nanoid } from "nanoid";
 import pg from "pg";
 
+const ADMIN_KEY = process.env.ADMIN_KEY || "";
+
+const adminKey = localStorage.getItem("ADMIN_KEY") || "";
+
+await fetch(`/api/rooms/${id}`, {
+  method: "DELETE",
+  headers: adminKey ? { "x-admin-key": adminKey } : {}
+});
+
+function isAdmin(req) {
+  // 헤더로 받은 관리자키가 서버의 ADMIN_KEY와 같으면 관리자
+  return ADMIN_KEY && req.get("x-admin-key") === ADMIN_KEY;
+}
+
 const { Pool } = pg;
 
 const app = express();
