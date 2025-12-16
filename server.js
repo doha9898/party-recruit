@@ -5,21 +5,14 @@ import { fileURLToPath } from "url";
 import { nanoid } from "nanoid";
 import pg from "pg";
 
-const ADMIN_KEY = process.env.ADMIN_KEY || "";
+const { Pool } = pg;
 
-const adminKey = localStorage.getItem("ADMIN_KEY") || "";
-
-await fetch(`/api/rooms/${id}`, {
-  method: "DELETE",
-  headers: adminKey ? { "x-admin-key": adminKey } : {}
-});
+const ADMIN_KEY = process.env.ADMIN_KEY || ""; // Koyeb 환경변수로 넣을 값
 
 function isAdmin(req) {
   // 헤더로 받은 관리자키가 서버의 ADMIN_KEY와 같으면 관리자
   return ADMIN_KEY && req.get("x-admin-key") === ADMIN_KEY;
 }
-
-const { Pool } = pg;
 
 const app = express();
 app.set("trust proxy", 1); // Koyeb(리버스프록시) 환경에서 req.secure 판단용
@@ -391,7 +384,7 @@ app.post(
   })
 );
 
-// 방 삭제(방장만)
+// ✅ 방 삭제: 방장이면 OK / 방장이 아니면 관리자키 있으면 OK
 app.delete(
   "/api/rooms/:id",
   ahDb(async (req, res) => {
@@ -405,8 +398,10 @@ app.delete(
     if (roomRes.rowCount === 0)
       return res.status(404).json({ message: "방을 찾을 수 없어." });
 
-    if (roomRes.rows[0].host_token !== req.partyToken) {
-      return res.status(403).json({ message: "방장만 삭제할 수 있어." });
+    const isHost = roomRes.rows[0].host_token === req.partyToken;
+
+    if (!isHost && !isAdmin(req)) {
+      return res.status(403).json({ message: "방장만 삭제할 수 있어. (또는 관리자 키 필요)" });
     }
 
     await p.query(`delete from public.rooms where id = $1`, [roomId]);
@@ -424,7 +419,7 @@ app.get(/^\/(?!api\/).*/, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// 에러 핸들러 (502 대신 500 JSON)
+// 에러 핸들러
 app.use((err, req, res, next) => {
   console.error("❌ API Error:", err);
   res.status(500).json({ ok: false, error: "SERVER_ERROR" });

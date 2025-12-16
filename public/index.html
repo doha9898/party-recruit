@@ -29,33 +29,20 @@
     .meTag { font-size: 12px; border: 1px solid #bbb; border-radius: 999px; padding: 1px 8px; margin-left: 8px; color: #333; }
     .fullTag { border-color: #c33; color: #c33; }
 
-/* ✅ 모바일 반응형 */
-@media (max-width: 720px) {
-  body { margin: 16px; }
-  .gridCreate {
-    grid-template-columns: 1fr;   /* 한 줄에 하나씩 */
-    gap: 10px;
-  }
-
-  /* 날짜+시+분은 가로 유지(너무 길면 줄바꿈) */
-  .gridCreate > div[style*="display:flex"] {
-    flex-wrap: wrap;
-  }
-  .gridCreate input,
-  .gridCreate select,
-  .gridCreate button {
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  /* 날짜/시/분만 3개를 적당히 나눠 갖게 */
-  #date { flex: 1 1 160px; }
-  #hour, #minute { flex: 1 1 90px; }
-
-  .topRow { flex-wrap: wrap; gap: 8px; }
-  .roomHeader { flex-wrap: wrap; }
-}
-
+    /* ✅ 모바일 반응형 */
+    @media (max-width: 720px) {
+      body { margin: 16px; }
+      .gridCreate { grid-template-columns: 1fr; gap: 10px; }
+      .gridCreate > div[style*="display:flex"] { flex-wrap: wrap; }
+      .gridCreate input, .gridCreate select, .gridCreate button {
+        width: 100%;
+        box-sizing: border-box;
+      }
+      #date { flex: 1 1 160px; }
+      #hour, #minute { flex: 1 1 90px; }
+      .topRow { flex-wrap: wrap; gap: 8px; }
+      .roomHeader { flex-wrap: wrap; }
+    }
   </style>
 </head>
 <body>
@@ -74,9 +61,7 @@
 
     <div class="card">
       <div class="topRow">
-        <div>
-          <b>방 만들기</b>
-        </div>
+        <div><b>방 만들기</b></div>
       </div>
 
       <div style="height:12px"></div>
@@ -111,6 +96,7 @@
 
 <script>
   const NAMEJOB_KEY = "party_namejob";
+  const ADMIN_KEY_STORAGE = "ADMIN_KEY";
 
   function loadSavedNamejob() {
     return (localStorage.getItem(NAMEJOB_KEY) || "").trim();
@@ -118,6 +104,14 @@
   function saveNamejob(v) {
     const t = (v || "").trim();
     if (t) localStorage.setItem(NAMEJOB_KEY, t);
+  }
+
+  function getSavedAdminKey() {
+    return (localStorage.getItem(ADMIN_KEY_STORAGE) || "").trim();
+  }
+  function setSavedAdminKey(v) {
+    const t = (v || "").trim();
+    if (t) localStorage.setItem(ADMIN_KEY_STORAGE, t);
   }
 
   const $ = (id) => document.getElementById(id);
@@ -128,18 +122,15 @@
     const hourSel = $("hour");
     const minuteSel = $("minute");
 
-    // 00-23시
     hourSel.innerHTML = Array.from({length:24}, (_,h)=>
       `<option value="${pad2(h)}">${pad2(h)}시</option>`
     ).join("");
 
-    // 00/10/20/30/40/50분
     const mins = [0,10,20,30,40,50].map(m => pad2(m));
     minuteSel.innerHTML = mins.map(m =>
       `<option value="${m}">${m}분</option>`
     ).join("");
 
-    // 기본값: 지금+30분, 10분 단위 올림
     const t = new Date(Date.now() + 30*60*1000);
     let m = Math.ceil(t.getMinutes()/10)*10;
     if (m === 60) { t.setHours(t.getHours()+1); m = 0; }
@@ -151,9 +142,9 @@
   }
 
   function getSelectedISO() {
-    const d = $("date").value;     // YYYY-MM-DD
-    const hh = $("hour").value;    // 00-23
-    const mm = $("minute").value;  // 00/10/...
+    const d = $("date").value;
+    const hh = $("hour").value;
+    const mm = $("minute").value;
     if (!d || !hh || !mm) return null;
 
     const local = new Date(`${d}T${hh}:${mm}:00`);
@@ -161,14 +152,20 @@
     return local.toISOString();
   }
 
-  async function api(path, options) {
+  async function api(path, options = {}) {
+    // ✅ headers merge (options.headers가 있으면 Content-Type이 날아가지 않게)
+    const baseHeaders = { "Content-Type": "application/json" };
+    const mergedHeaders = { ...baseHeaders, ...(options.headers || {}) };
+
     const res = await fetch(path, {
-      headers: { "Content-Type": "application/json" },
       ...options,
+      headers: mergedHeaders,
     });
+
     const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch {}
+
     if (!res.ok) {
       const msg = (data && data.message) ? data.message : `요청 실패 (${res.status})`;
       throw new Error(msg);
@@ -186,7 +183,6 @@
     }[m]));
   }
 
-  // ✅ (요일) 포함
   function formatTime(iso) {
     try {
       const d = new Date(iso);
@@ -240,7 +236,9 @@
       const full = room.isFull;
       const fullPill = full ? ` <span class="pill fullTag">정원 마감</span>` : "";
       const shareBtn = `<button class="shareBtn" title="이 방 링크 복사">링크 복사</button>`;
-      const hostActions = room.isHost ? `<button class="deleteBtn danger">방 삭제</button>` : "";
+
+      // ✅ 삭제 버튼 "누구에게나 보이게"
+      const deleteBtn = `<button class="deleteBtn danger">방 삭제</button>`;
 
       let actionHtml = "";
       if (room.isHost) {
@@ -250,7 +248,6 @@
       } else if (full) {
         actionHtml = `<button disabled title="정원이 꽉 찼어">예약 마감</button>`;
       } else {
-        // ✅ 저장된 닉/직업 자동 입력
         actionHtml = `
           <input class="joinInput" value="${escapeHtml(savedNamejob)}" placeholder="참가 닉네임/직업 (예: 린엘/치유성)" />
           <button class="joinBtn">예약(참가)</button>
@@ -258,7 +255,7 @@
       }
 
       return `
-        <div class="card" data-room="${room.id}">
+        <div class="card" data-room="${room.id}" data-ishost="${room.isHost ? "1" : "0"}">
           <div class="roomHeader">
             <div>
               <div class="roomTitle">
@@ -274,7 +271,7 @@
             <div style="display:flex; gap:8px; align-items:center;">
               ${shareBtn}
               <span class="pill">참가 ${room.count}명</span>
-              ${hostActions}
+              ${deleteBtn}
             </div>
           </div>
 
@@ -296,9 +293,10 @@
 
     root.querySelectorAll(".card[data-room]").forEach(card => {
       const roomId = card.getAttribute("data-room");
+      const isHost = card.getAttribute("data-ishost") === "1";
       const msgEl = card.querySelector(".joinMsg");
 
-      // 링크 복사 / 공유
+      // 링크 복사
       const shareBtnEl = card.querySelector(".shareBtn");
       if (shareBtnEl) {
         shareBtnEl.addEventListener("click", async () => {
@@ -323,8 +321,6 @@
       const joinBtn = card.querySelector(".joinBtn");
       if (joinBtn) {
         const input = card.querySelector(".joinInput");
-
-        // ✅ 타이핑 중에도 저장
         input?.addEventListener("input", () => saveNamejob(input.value));
 
         joinBtn.addEventListener("click", async () => {
@@ -332,7 +328,6 @@
           setMsg(msgEl, "", "");
           if (!namejob) return setMsg(msgEl, "error", "닉네임/직업을 입력해줘.");
 
-          // ✅ 참가할 때도 저장
           saveNamejob(namejob);
 
           joinBtn.disabled = true;
@@ -369,14 +364,35 @@
         });
       }
 
-      // 방 삭제(방장)
+      // ✅ 방 삭제(방장 or 관리자키)
       const delBtn = card.querySelector(".deleteBtn");
       if (delBtn) {
         delBtn.addEventListener("click", async () => {
           setMsg(msgEl, "", "");
+
+          const ok = confirm("이 방을 삭제할까?");
+          if (!ok) return;
+
           delBtn.disabled = true;
           try {
-            await api(`/api/rooms/${roomId}`, { method: "DELETE" });
+            const headers = {};
+
+            // 방장이 아니면 관리자키 필요
+            if (!isHost) {
+              let key = getSavedAdminKey();
+              if (!key) {
+                key = prompt("관리자 키를 입력하면 삭제할 수 있어:", "") || "";
+              }
+              key = key.trim();
+              if (!key) {
+                throw new Error("방장이 아니면 관리자 키가 필요해.");
+              }
+              setSavedAdminKey(key);
+              headers["x-admin-key"] = key;
+            }
+
+            await api(`/api/rooms/${roomId}`, { method: "DELETE", headers });
+            setMsg(msgEl, "ok", "삭제 완료!");
             await loadRooms();
           } catch (e) {
             setMsg(msgEl, "error", e.message);
@@ -388,10 +404,8 @@
     });
   }
 
-  // ✅ 셀렉트 옵션 채우기
   initTimePickers();
 
-  // ✅ 저장된 닉/직업을 방장 입력칸에 자동 세팅 + 타이핑 중 저장
   const saved = loadSavedNamejob();
   if (saved && $("host")) $("host").value = saved;
   $("host")?.addEventListener("input", (e) => saveNamejob(e.target.value));
@@ -417,7 +431,6 @@
       return setMsg(msgEl, "error", "정원은 2~20 사이로 입력해줘.");
     }
 
-    // ✅ 방 생성 시 방장 닉/직업 저장
     saveNamejob(host);
 
     $("createBtn").disabled = true;
@@ -427,7 +440,6 @@
         body: JSON.stringify({ dungeon, time: iso, host, capacity: cap })
       });
       $("dungeon").value = "";
-      // ✅ host는 비우지 않음(재사용 편하게)
       $("capacity").value = "4";
       setMsg(msgEl, "ok", "방 생성 완료!");
       await loadRooms();
