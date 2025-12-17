@@ -10,6 +10,7 @@
       opacity: 0.55;
       filter: grayscale(1);
     }
+    /* (시간 지남 뱃지는 제거했지만, 스타일 남겨도 문제 없음) */
     .pill.expiredTag {
       border-color: #888;
       color: #666;
@@ -253,12 +254,13 @@
 
       // ✅ 만료 판단
       const isExpired = new Date(room.time).getTime() < Date.now();
-      const expiredPill = isExpired ? ` <span class="pill expiredTag">시간 지남</span>` : "";
+
+      // ❌ 시간 지남 뱃지 제거 (요구사항)
+      // const expiredPill = isExpired ? ` <span class="pill expiredTag">시간 지남</span>` : "";
+
       const fullPill = full ? ` <span class="pill fullTag">정원 마감</span>` : "";
 
       const shareBtn = `<button class="shareBtn" title="이 방 링크 복사">공유</button>`;
-
-      // ✅ 삭제 버튼은 항상 보이게
       const deleteBtn = `<button class="deleteBtn danger">삭제</button>`;
 
       let actionHtml = "";
@@ -286,7 +288,6 @@
               <div class="roomTitle">
                 <b>${escapeHtml(room.dungeon)}</b>
                 <b style="margin-left:10px;">${escapeHtml(formatTime(room.time))}</b>
-                ${expiredPill}
                 ${fullPill}
               </div>
               <div class="muted roomMeta">
@@ -294,9 +295,10 @@
               </div>
             </div>
 
+            <!-- ✅ 순서 변경: 참가 N명 → 공유 → 삭제 -->
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-              ${shareBtn}
               <span class="pill">참가 ${room.count}명</span>
+              ${shareBtn}
               ${deleteBtn}
             </div>
           </div>
