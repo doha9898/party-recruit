@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>밥풀 레기온 파티원 모집</title>
   <style>
+    /* ✅ 만료(시간 지난 방) 회색 처리 */
+    .card.expired {
+      opacity: 0.55;
+      filter: grayscale(1);
+    }
+    .pill.expiredTag {
+      border-color: #888;
+      color: #666;
+    }
+
     body { font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif; margin: 24px; }
     .wrap { max-width: 980px; margin: 0 auto; }
     h1 { margin: 0 0 16px; }
@@ -163,17 +173,14 @@
   }
 
   async function apiDeleteWithAdmin(path) {
-    // 1) 저장된 키로 먼저 시도
     const saved = getAdminKey();
     if (saved) {
       return api(path, { method: "DELETE", headers: { "x-admin-key": saved } });
     }
 
-    // 2) 키 없으면 입력받기
     const k = prompt("관리자 키를 입력하면 바로 삭제됩니다.\n(방장이면 그냥 취소 눌러도 삭제 가능합니다)");
     if (!k) {
-      // 키 없이도 한번 시도 (방장일 수 있으니)
-      return api(path, { method: "DELETE" });
+      return api(path, { method: "DELETE" }); // 방장일 수 있으니 키 없이 시도
     }
     setAdminKey(k);
     return api(path, { method: "DELETE", headers: { "x-admin-key": k } });
@@ -229,6 +236,9 @@
   }
 
   function renderRooms(rooms) {
+    // ✅ 정렬: 늦은 시간 위 / 빠른 시간 아래 (요구사항)
+    rooms = [...rooms].sort((a, b) => new Date(b.time) - new Date(a.time));
+
     const root = $("rooms");
     if (!rooms.length) {
       root.innerHTML = `<div class="card"><div class="muted">아직 모집 방이 없어. 위에서 먼저 만들어봐!</div></div>`;
@@ -240,14 +250,23 @@
     root.innerHTML = rooms.map(room => {
       const people = room.participants || [];
       const full = room.isFull;
+
+      // ✅ 만료 판단
+      const isExpired = new Date(room.time).getTime() < Date.now();
+      const expiredPill = isExpired ? ` <span class="pill expiredTag">시간 지남</span>` : "";
       const fullPill = full ? ` <span class="pill fullTag">정원 마감</span>` : "";
+
       const shareBtn = `<button class="shareBtn" title="이 방 링크 복사">링크 복사</button>`;
 
       // ✅ 삭제 버튼은 항상 보이게
       const deleteBtn = `<button class="deleteBtn danger">방 삭제</button>`;
 
       let actionHtml = "";
-      if (room.isHost) {
+
+      // ✅ 만료면 참가/취소 모두 막고 종료 표시
+      if (isExpired) {
+        actionHtml = `<button disabled title="모집 시간이 지났어">모집 종료</button>`;
+      } else if (room.isHost) {
         actionHtml = `<span class="muted">※ 방장입니다. 삭제 버튼으로 방을 내릴 수 있어요.</span>`;
       } else if (room.joined) {
         actionHtml = `<button class="leaveBtn">예약 취소</button>`;
@@ -261,12 +280,13 @@
       }
 
       return `
-        <div class="card" data-room="${room.id}">
+        <div class="card ${isExpired ? "expired" : ""}" data-room="${room.id}">
           <div class="roomHeader">
             <div>
               <div class="roomTitle">
                 <b>${escapeHtml(room.dungeon)}</b>
                 <b style="margin-left:10px;">${escapeHtml(formatTime(room.time))}</b>
+                ${expiredPill}
                 ${fullPill}
               </div>
               <div class="muted roomMeta">
@@ -378,13 +398,10 @@
 
           delBtn.disabled = true;
           try {
-            // 방장인 경우는 헤더 없이도 통과할 것임
-            // 방장이 아니면 prompt로 키 받아 헤더로 보냄
             await apiDeleteWithAdmin(`/api/rooms/${roomId}`);
             setMsg(msgEl, "ok", "삭제 완료!");
             await loadRooms();
           } catch (e) {
-            // 키가 틀렸거나 권한 없으면 여기로 옴
             setMsg(msgEl, "error", e.message);
           } finally {
             delBtn.disabled = false;
