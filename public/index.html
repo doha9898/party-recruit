@@ -8,6 +8,19 @@
 <link href="https://hangeul.pstatic.net/hangeul_static/css/nanum-square-neo.css" rel="stylesheet">
 
   <style>
+
+/* ✅ 전체 줄간격(가독성) */
+body { line-height: 1.3; }
+
+/* ✅ 방 목록 카드 안쪽은 조금 더 여유 */
+.card { line-height: 1.3; }
+
+/* ✅ 참가자 리스트 줄간격/간격 추가 */
+ul.people { line-height: 1.3; }
+ul.people li { margin: 4px 0; }
+
+.roomTitle { line-height: 1.3; }
+
     /* ✅ 만료(시간 지난 방) 회색 처리 */
     .card.expired {
       opacity: 0.55;
@@ -81,11 +94,6 @@ button {
     </div>
 
     <div class="card">
-      <div class="topRow">
-        <div><b>방 만들기</b></div>
-      </div>
-
-      <div style="height:12px"></div>
 
       <div class="gridCreate">
         <input id="dungeon" placeholder="던전 이름 (예: 불신, 초월9단)" />
@@ -107,9 +115,10 @@ button {
     <div class="topRow" style="margin-top:18px;">
       <b>모집 중인 방</b>
       <div style="display:flex; gap:8px; align-items:center;">
-        <button id="refreshBtn" title="목록 새로고침">새로고침</button>
-        <span class="pill" id="statusPill">로딩...</span>
-      </div>
+  <span class="pill" id="statusPill">로딩...</span>
+  <button id="refreshBtn" title="목록 새로고침">새로고침</button>
+</div>
+
     </div>
 
     <div id="rooms"></div>
