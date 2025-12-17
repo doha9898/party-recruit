@@ -4,19 +4,33 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>밥풀 레기온 파티원 모집</title>
+
+<link href="https://hangeul.pstatic.net/hangeul_static/css/nanum-square-neo.css" rel="stylesheet">
+
   <style>
     /* ✅ 만료(시간 지난 방) 회색 처리 */
     .card.expired {
       opacity: 0.55;
       filter: grayscale(1);
     }
-    /* (시간 지남 뱃지는 제거했지만, 스타일 남겨도 문제 없음) */
-    .pill.expiredTag {
-      border-color: #888;
-      color: #666;
-    }
 
-    body { font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif; margin: 24px; }
+    /* ✅ 상태 뱃지 컬러 */
+    .pill.openTag { border-color: #1e88e5; color: #1e88e5; }   /* 파란색: 모집 중 */
+    .pill.closedTag { border-color: #c33; color: #c33; }       /* 빨간색: 예약 마감 */
+
+   /* ✅ 폰트 세팅: 전체 Light / 제목 Heavy / 버튼 Bold */
+body {
+  font-family: "NanumSquareNeoLight", "NanumSquareNeo", system-ui, -apple-system, "Malgun Gothic", sans-serif;
+  margin: 24px;
+}
+
+h1, .roomTitle, .roomTitle b {
+  font-family: "NanumSquareNeoHeavy", "NanumSquareNeoExtraBold", "NanumSquareNeo", sans-serif;
+}
+
+button {
+  font-family: "NanumSquareNeoBold", "NanumSquareNeo", sans-serif;
+}
     .wrap { max-width: 980px; margin: 0 auto; }
     h1 { margin: 0 0 16px; }
     .card { border: 1px solid #ddd; border-radius: 14px; padding: 16px; margin: 12px 0; }
@@ -38,7 +52,6 @@
     .joinRow input { flex: 1; min-width: 220px; }
     ul.people { margin: 8px 0 0; padding-left: 18px; }
     .meTag { font-size: 12px; border: 1px solid #bbb; border-radius: 999px; padding: 1px 8px; margin-left: 8px; color: #333; }
-    .fullTag { border-color: #c33; color: #c33; }
 
     /* ✅ 모바일 반응형 */
     @media (max-width: 720px) {
@@ -237,7 +250,7 @@
   }
 
   function renderRooms(rooms) {
-    // ✅ 정렬: 늦은 시간 위 / 빠른 시간 아래 (요구사항)
+    // ✅ 정렬: 늦은 시간 위 / 빠른 시간 아래
     rooms = [...rooms].sort((a, b) => new Date(b.time) - new Date(a.time));
 
     const root = $("rooms");
@@ -255,25 +268,30 @@
       // ✅ 만료 판단
       const isExpired = new Date(room.time).getTime() < Date.now();
 
-      // ❌ 시간 지남 뱃지 제거 (요구사항)
-      // const expiredPill = isExpired ? ` <span class="pill expiredTag">시간 지남</span>` : "";
-
-      const fullPill = full ? ` <span class="pill fullTag">정원 마감</span>` : "";
+      // ✅ 상태 뱃지: 만료면 안 보임 / 만료 아니면 (예약 마감 or 모집 중)
+      let statusPill = "";
+      if (!isExpired) {
+        statusPill = full
+          ? `<span class="pill closedTag">예약 마감</span>`
+          : `<span class="pill openTag">모집 중</span>`;
+      }
 
       const shareBtn = `<button class="shareBtn" title="이 방 링크 복사">공유</button>`;
       const deleteBtn = `<button class="deleteBtn danger">삭제</button>`;
 
       let actionHtml = "";
 
-      // ✅ 만료면 참가/취소 모두 막고 종료 표시
+      // ❌ 요구사항: "예약 마감/모집 종료" 버튼 제거
+      // - 만료: 회색 처리만 하고 참가 UI 안 보여줌
       if (isExpired) {
-        actionHtml = `<button disabled title="모집 시간이 지났어">모집 종료</button>`;
+        actionHtml = ``;
       } else if (room.isHost) {
         actionHtml = `<span class="muted">※ 방장입니다. 삭제 버튼으로 방을 내릴 수 있어요.</span>`;
       } else if (room.joined) {
         actionHtml = `<button class="leaveBtn">예약 취소</button>`;
       } else if (full) {
-        actionHtml = `<button disabled title="정원이 꽉 찼어">예약 마감</button>`;
+        // 예약 마감이면 참가 UI 숨김 (버튼 표시 X)
+        actionHtml = ``;
       } else {
         actionHtml = `
           <input class="joinInput" value="${escapeHtml(savedNamejob)}" placeholder="참가 닉네임/직업 (예: 린엘/치유성)" />
@@ -286,16 +304,16 @@
           <div class="roomHeader">
             <div>
               <div class="roomTitle">
+                ${statusPill}
                 <b>${escapeHtml(room.dungeon)}</b>
                 <b style="margin-left:10px;">${escapeHtml(formatTime(room.time))}</b>
-                ${fullPill}
               </div>
               <div class="muted roomMeta">
                 정원: ${room.count}/${room.capacity}
               </div>
             </div>
 
-            <!-- ✅ 순서 변경: 참가 N명 → 공유 → 삭제 -->
+            <!-- ✅ 순서: 참가 N명 → 공유 → 삭제 -->
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <span class="pill">참가 ${room.count}명</span>
               ${shareBtn}
@@ -391,7 +409,7 @@
         });
       }
 
-      // ✅ 방 삭제: 방장이면 바로, 아니면 관리자키 입력해서 삭제
+      // 방 삭제: 방장이면 바로, 아니면 관리자키 입력해서 삭제
       const delBtn = card.querySelector(".deleteBtn");
       if (delBtn) {
         delBtn.addEventListener("click", async () => {
