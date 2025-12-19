@@ -334,11 +334,15 @@ app.put(
     const dungeon = String(req.body?.dungeon ?? "").trim();
     const capacity = Math.floor(Number(req.body?.capacity));
 
+    // 입력값 검증
     if (!dungeon) {
       return res.status(400).json({ message: "던전 이름을 입력해줘." });
     }
+
     if (!Number.isFinite(capacity) || capacity < 2 || capacity > 20) {
-      return res.status(400).json({ message: "정원은 2~20 사이만 가능해." });
+      return res
+        .status(400)
+        .json({ message: "정원은 2~20 사이만 가능해." });
     }
 
     const p = getPoolOrNull();
@@ -348,7 +352,6 @@ app.put(
       `
       select
         r.host_token,
-        r.capacity,
         count(p.id)::int as count
       from public.rooms r
       left join public.participants p
@@ -368,12 +371,12 @@ app.put(
 
     // 권한 체크
     if (!isHost && !isAdmin(req)) {
-      return res
-        .status(403)
-        .json({ message: "방장만 수정할 수 있어. (또는 관리자 키 필요)" });
+      return res.status(403).json({
+        message: "방장만 수정할 수 있어. (또는 관리자 키 필요)",
+      });
     }
 
-    // 현재 인원보다 작은 정원 금지
+    // 현재 참가 인원보다 작은 정원 금지
     if (capacity < room.count) {
       return res.status(400).json({
         message: `현재 참가 인원(${room.count}명)보다 작은 정원으로는 수정할 수 없어.`,
