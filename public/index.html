@@ -125,22 +125,6 @@ button {
 
 <script>
 
-  // ✅ 수정 버튼 클릭 이벤트 (딱 1번만 등록)
-  document.addEventListener('click', function (e) {
-    if (e.target.classList.contains('editbtn')) {
-      const roomId = e.target.dataset.roomId;
-      console.log('수정 클릭됨:', roomId);
-
-      // 임시 확인용
-      alert('방 수정 클릭: ' + roomId);
-
-      // 👉 다음 단계:
-      // 1. prompt로 던전명 / 정원 받기
-      // 2. fetch PUT /api/rooms/:id 호출
-    }
-  });
-
-
   const NAMEJOB_KEY = "party_namejob";
   const ADMIN_KEY_LS = "ADMIN_KEY";
 
@@ -302,9 +286,6 @@ button {
       }
 
       const shareBtn = `<button class="shareBtn" title="이 방 링크 복사">공유</button>`;
-const editBtn = (room.isHost)
-  ? `<button class="editBtn">수정</button>`
-  : ``;
       const deleteBtn = `<button class="deleteBtn danger">삭제</button>`;
 
       let actionHtml = "";
@@ -345,7 +326,6 @@ const editBtn = (room.isHost)
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
   <span class="pill">참가 ${room.count}명</span>
   ${shareBtn}
-  ${editBtn}
   ${deleteBtn}
 </div>
           </div>
