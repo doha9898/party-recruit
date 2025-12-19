@@ -124,6 +124,24 @@ button {
   </div>
 
 <script>
+
+<script>
+  // ✅ 수정 버튼 클릭 이벤트 (딱 1번만 등록)
+  document.addEventListener('click', function (e) {
+    if (e.target.classList.contains('editbtn')) {
+      const roomId = e.target.dataset.roomId;
+      console.log('수정 클릭됨:', roomId);
+
+      // 임시 확인용
+      alert('방 수정 클릭: ' + roomId);
+
+      // 👉 다음 단계:
+      // 1. prompt로 던전명 / 정원 받기
+      // 2. fetch PUT /api/rooms/:id 호출
+    }
+  });
+</script>
+
   const NAMEJOB_KEY = "party_namejob";
   const ADMIN_KEY_LS = "ADMIN_KEY";
 
