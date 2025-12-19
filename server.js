@@ -326,6 +326,75 @@ app.post(
   })
 );
 
+// ✅ 방 수정: 방장이면 OK / 관리자키 있으면 OK
+app.put(
+  "/api/rooms/:id",
+  ahDb(async (req, res) => {
+    const roomId = req.params.id;
+    const dungeon = String(req.body?.dungeon ?? "").trim();
+    const capacity = Math.floor(Number(req.body?.capacity));
+
+    if (!dungeon) {
+      return res.status(400).json({ message: "던전 이름을 입력해줘." });
+    }
+    if (!Number.isFinite(capacity) || capacity < 2 || capacity > 20) {
+      return res.status(400).json({ message: "정원은 2~20 사이만 가능해." });
+    }
+
+    const p = getPoolOrNull();
+
+    // 방 정보 + 현재 참가 인원 조회
+    const roomRes = await p.query(
+      `
+      select
+        r.host_token,
+        r.capacity,
+        count(p.id)::int as count
+      from public.rooms r
+      left join public.participants p
+        on r.id = p.room_id
+      where r.id = $1
+      group by r.id
+      `,
+      [roomId]
+    );
+
+    if (roomRes.rowCount === 0) {
+      return res.status(404).json({ message: "방을 찾을 수 없어." });
+    }
+
+    const room = roomRes.rows[0];
+    const isHost = room.host_token === req.partyToken;
+
+    // 권한 체크
+    if (!isHost && !isAdmin(req)) {
+      return res
+        .status(403)
+        .json({ message: "방장만 수정할 수 있어. (또는 관리자 키 필요)" });
+    }
+
+    // 현재 인원보다 작은 정원 금지
+    if (capacity < room.count) {
+      return res.status(400).json({
+        message: `현재 참가 인원(${room.count}명)보다 작은 정원으로는 수정할 수 없어.`,
+      });
+    }
+
+    // 실제 수정
+    await p.query(
+      `
+      update public.rooms
+      set dungeon = $1,
+          capacity = $2
+      where id = $3
+      `,
+      [dungeon, capacity, roomId]
+    );
+
+    res.json({ ok: true });
+  })
+);
+
 // 참가
 app.post(
   "/api/rooms/:id/join",

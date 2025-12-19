@@ -285,6 +285,9 @@ button {
       }
 
       const shareBtn = `<button class="shareBtn" title="이 방 링크 복사">공유</button>`;
+const editBtn = (room.isHost)
+  ? `<button class="editBtn">수정</button>`
+  : ``;
       const deleteBtn = `<button class="deleteBtn danger">삭제</button>`;
 
       let actionHtml = "";
@@ -323,10 +326,11 @@ button {
 
             <!-- ✅ 순서: 참가 N명 → 공유 → 삭제 -->
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-              <span class="pill">참가 ${room.count}명</span>
-              ${shareBtn}
-              ${deleteBtn}
-            </div>
+  <span class="pill">참가 ${room.count}명</span>
+  ${shareBtn}
+  ${editBtn}
+  ${deleteBtn}
+</div>
           </div>
 
           <div class="joinRow">${actionHtml}</div>
